@@ -1,0 +1,131 @@
+#user
++--+--+--+
+| response code | http status | message |
++--+--+--+
+| 1001 | 400/401 | Invalid member. Not found. |
++--+--+--+
+| 1002 | 400/401 | Invalid password. Password did not match. |
++--+--+--+
+| 1003 | 400 | Member is banned. Please contact our customer service. |
++--+--+--+
+| 1004 | 400 | Unverified member. Please check registered email and verified first. |
++--+--+--+
+| 1005 | 400 | Invalid email. No account found with that email. |
++--+--+--+
+| 1006 | 400 | Invalid action. You can only change email once. |
++--+--+--+
+| 1007 | 409 | Invalid email. Email already exist, please use another email. |
++--+--+--+
+| 1008 | 400 | Invalid action. You can only change bank data once. |
++--+--+--+
+| 1009 | 409 | Invalid bank. Bank data already exist, please use another bank. |
++--+--+--+
+| 1010 | 400 | Invalid action. You can only change phone data once. |
++--+--+--+
+| 1011 | 400 | Invalid phone. Phone number already exist, please use another phone. |
++--+--+--+
+| 1012 | 400 | Invalid action. You can only change landing page once. |
++--+--+--+
+| 1013 | 409 | Invalid landing page. landing page already exist, please use another name.|
++--+--+--+
+| 1014 | 400 | Incomplete bank data. Please complete it first.|
++--+--+--+
+| 1015 | 400 | Insufficient pin balance.|
++--+--+--+
+| 1016 | 400 | Insufficient bonus referral balance.|
++--+--+--+
+| 1017 | 400 | Insufficient bonus binary balance.|
++--+--+--+
+| 1018 | 400 | Insufficient bonus binary balance.|
++--+--+--+
+| 1019 | 409 | Invalid username. Username already exist, please use another username.|
++--+--+--+
+| 1020 | 409 | Invalid NIK. NIK already exist, please use another NIK.|
++--+--+--+
+| 1021 | 409 | Invalid NPWP. NPWP already exist, please use another NPWP.|
++--+--+--+
+| 1031 | 409 | Invalid refresh token. Token not found.|
++--+--+--+
+
+#claim reward & withdraws bonus
++--+--+--+
+| response code | http status | message |
++--+--+--+
+| 2001 | 403 | Claim reward and bonus withdrawal can only be done on monday - friday, after 01:00 west indonesia time |
++--+--+--+
+| 2002 | 403 | Claim reward and bonus withdrawal closed. Please contact our customer service |
++--+--+--+
+| 2003 | 400 | Invalid action. \nReward %rewardName% need  %totalPairing% left and %totalPairing% right. Current %totLeft% left and %totRight% right |
++--+--+--+
+| 2004 | 400 | Invalid action. You can only claim reward %rewardName% once |
++--+--+--+
+| 2005 | 400 | Invalid action. You can only have one pending reward bonus withdrawal. |
++--+--+--+
+| 2006 | 400 | Invalid action. You can only have one pending referral bonus withdrawal. |
++--+--+--+
+| 2007 | 400 | Invalid action. You can only have one pending binary bonus withdrawal. |
++--+--+--+
+| 2008 | 400 | Invalid action. Not allowed multi withdraw. |
++--+--+--+
+| 2010 | 400 | Invalid id. Withdrawal not found.|
++--+--+--+
+
+#transfer
++--+--+--+
+| 3001 | 403 | Invalid to username. You can not transfer to your self. |
++--+--+--+
+| 3002 | 403 | Transfer pin closed. Please contact our customer service. |
++--+--+--+
+| 3003 | 400 | Invalid to username. Target is banned. |
++--+--+--+
+| 3004 | 400 | Invalid to username. Target is frozen. |
++--+--+--+
+| 3005 | 400 | Invalid to username. Target is not stockist. |
++--+--+--+
+
+#register
++--+--+--+
+| 4001 | 403 | Registration closed. Please contact our customer service |
++--+--+--+
+| 4002 | 400 | Invalid network. %refUsernameDb% -> %username% not down line. |
++--+--+--+
+| 4003 | 400 | Invalid username. Username already exist, please use another username.|
++--+--+--+
+| 4004 | 400 | Invalid position. %upUsernameDb% left not available.|
++--+--+--+
+| 4005 | 400 | Invalid position. %upUsernameDb% right not available.|
++--+--+--+
+
+#upgrade
++--+--+--+
+| 5001 | 403 | Upgrade closed. Please contact our customer service |
++--+--+--+
+| 5002 | 400 | You can not upgrade with same or below level package. Please choose another level package.|
++--+--+--+
+
+#repeat order
++--+--+--+
+| 6001 | 403 | Repeat order closed. Please contact our customer service |
++--+--+--+
+
+#announcement
++--+--+--+
+| 10001 | 403 | Invalid announcement. Not found. |
++--+--+--+
+
+#bank
++--+--+--+
+| 11001 | 403 | Invalid bank. Not found. |
++--+--+--+
+
+#bonus
++--+--+--+
+| 12001 | 403 | Invalid bank. Not found. |
++--+--+--+
+
+#product
++--+--+--+
+| 15001 | 403 | Invalid product. Not found. |
++--+--+--+
+| 15002 | 400 | Invalid product. Product package did not match. |
++--+--+--+
