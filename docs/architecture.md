@@ -40,20 +40,27 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 │   │   ├── database/                # MySQL connection pool
 │   │   ├── redis/                   # Redis client pool
 │   │   ├── logger/                  # Structured slog logger with secret sanitization
-│   │   ├── middleware/              # RequestID, Logger, Recovery, CORS, Timeout, Auth
+│   │   ├── middleware/              # RequestID, Logger, Recovery, CORS, Timeout, Auth, RequirePermission
+│   │   ├── pagination/              # Unified pagination extracting & metadata
 │   │   ├── response/                # Unified JSON response contract
 │   │   ├── errors/                  # Strongly typed error hierarchy
 │   │   └── httpserver/              # Server lifecycle and graceful shutdown
 │   │
 │   └── modules/                     # Feature slices
 │       ├── health/                  # Health check probes (Liveness, Readiness)
-│       └── auth/                    # Authentication & User Management
-│           ├── domain/              # Entities, Repository/Service Interfaces
-│           ├── application/         # Use cases (Register, Login, Refresh, Logout, Me)
-│           ├── infrastructure/      # MySQL, Redis, JWT, Bcrypt implementations
-│           └── delivery/            # HTTP Handlers, Request/Response DTOs, Routes
+│       ├── auth/                    # Authentication & User Management
+│       │   ├── domain/              # Entities, Repository/Service Interfaces
+│       │   ├── application/         # Use cases (Register, Login, Refresh, Logout, Me)
+│       │   ├── infrastructure/      # MySQL, Redis, JWT, Bcrypt implementations
+│       │   └── delivery/            # HTTP Handlers, Request/Response DTOs, Routes
+│       └── rbac/                    # Role-Based Access Control (Phase 3)
+│           ├── domain/              # Role & Permission Entities, Repositories, Authz Service Interface
+│           ├── application/         # Commands, Queries, DTOs, RBAC Application Service
+│           ├── infrastructure/      # MySQL Repositories with Transactions, Redis Cache, Idempotent Seeder
+│           └── delivery/            # Role, Permission & UserRole Handlers, Routes
 ├── migrations/                      # SQL Schema migrations
 ├── deployments/                     # Container & orchestration definitions
+├── docs/                            # Architecture & OpenAPI specification
 ├── Dockerfile                       # Multi-stage production container
 ├── docker-compose.yml               # Complete stack (API, MySQL 8, Redis 7)
 ├── Makefile                         # DX tooling
@@ -84,7 +91,32 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 
 ---
 
-## 4. API Standard Contract
+## 4. Role-Based Access Control (RBAC) Design
+
+### Conceptual Model
+$$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Role} \longleftrightarrow \text{RolePermissions} \longleftrightarrow \text{Permission}$$
+
+- **Roles**: Logical groupings of permissions (e.g. `admin`, `editor`, `viewer`). Marked with `is_system = true` for immutable application roles.
+- **Permissions**: Atomic authorization rules formatted deterministically as `resource:action` (e.g. `user:read`, `role:create`, `permission:delete`).
+- **Separation of Concerns**:
+  - **Authentication** answers: *Who are you?* (Handled by `AuthMiddleware`).
+  - **Authorization** answers: *Are you allowed to perform this operation?* (Handled by `RequirePermission`).
+
+### Redis Permission Caching & Invalidation
+- **Cache Key**: `rbac:user:{user_id}:permissions`
+- **Cache-Aside Flow**:
+  1. `RequirePermission` queries `AuthorizationService.HasPermission(ctx, userID, permission)`.
+  2. If cached in Redis $\rightarrow$ instant authorization decision.
+  3. If cache miss $\rightarrow$ queries MySQL join table, populates Redis cache with TTL (1 hour).
+  4. If Redis is down/unavailable $\rightarrow$ graceful fallback to MySQL without blocking authorization.
+- **Explicit Invalidation**:
+  - Updating role permissions $\rightarrow$ invalidates all users assigned to that role.
+  - Assigning roles to a user $\rightarrow$ invalidates target user cache.
+  - Updating/deleting permissions $\rightarrow$ invalidates all affected user caches.
+
+---
+
+## 5. API Standard Contract
 
 ### Success Response
 ```json
@@ -114,15 +146,15 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 
 ---
 
-## 5. Centralized Error Hierarchy
+## 6. Centralized Error Hierarchy
 
 | Error Type | HTTP Status | Code | Typical Use Case |
 |---|---|---|---|
 | `ValidationError` | 400 Bad Request | `VALIDATION_ERROR` | Malformed payload, invalid field constraints |
 | `UnauthorizedError` | 401 Unauthorized | `UNAUTHORIZED` | Invalid/expired token, wrong credentials |
-| `ForbiddenError` | 403 Forbidden | `FORBIDDEN` | Suspended account, unauthorized resource |
-| `NotFoundError` | 404 Not Found | `NOT_FOUND` | User or entity does not exist |
-| `ConflictError` | 409 Conflict | `CONFLICT` | Duplicate email or unique constraint violation |
-| `BusinessError` | 422 Unprocessable | Custom code | Business rule violation |
+| `ForbiddenError` | 403 Forbidden | `FORBIDDEN` | Missing required RBAC permission |
+| `NotFoundError` | 404 Not Found | `NOT_FOUND` | User, role, or entity does not exist |
+| `ConflictError` | 409 Conflict | `CONFLICT` | Duplicate email, role name, or unique constraint violation |
+| `BusinessError` | 422 Unprocessable | Custom code | Business rule violation (e.g. attempting to delete system role) |
 | `InfrastructureError`| 503 Service Unavailable | `SERVICE_UNAVAILABLE` | Database/Redis connection down |
 | `InternalError` | 500 Internal Error | `INTERNAL_SERVER_ERROR` | Panics, unexpected system failures |

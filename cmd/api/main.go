@@ -15,6 +15,10 @@ import (
 	healthApp "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/health/application"
 	healthHTTP "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/health/delivery/http"
 	healthInfra "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/health/infrastructure"
+	rbacApp "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/rbac/application"
+	rbacHTTP "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/rbac/delivery/http"
+	rbacCache "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/rbac/infrastructure/cache"
+	rbacPersistence "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/rbac/infrastructure/persistence"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/config"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/database"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/httpserver"
@@ -38,22 +42,22 @@ func main() {
 		slog.String("port", cfg.Server.Port),
 	)
 
-	// 3. Initialize MySQL Database Pool
+	// 3. Initialize MySQL Database Pool (Fail-fast on initialization error)
 	mysqlDB, err := database.NewMySQL(cfg.MySQL)
 	if err != nil {
-		appLogger.Error("Failed to initialize MySQL connection pool", slog.String("error", err.Error()))
-	} else {
-		defer func() {
-			if closeErr := mysqlDB.Close(); closeErr != nil {
-				appLogger.Error("Error closing MySQL connection", slog.String("error", closeErr.Error()))
-			}
-		}()
-
-		if pingErr := mysqlDB.Ping(context.Background()); pingErr != nil {
-			appLogger.Warn("MySQL ping check failed during startup (will be verified by readiness probes)", slog.String("error", pingErr.Error()))
-		} else {
-			appLogger.Info("Connected to MySQL database successfully")
+		appLogger.Error("FATAL: Failed to initialize MySQL connection pool", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer func() {
+		if closeErr := mysqlDB.Close(); closeErr != nil {
+			appLogger.Error("Error closing MySQL connection", slog.String("error", closeErr.Error()))
 		}
+	}()
+
+	if pingErr := mysqlDB.Ping(context.Background()); pingErr != nil {
+		appLogger.Warn("MySQL ping check failed during startup (will be verified by readiness probes)", slog.String("error", pingErr.Error()))
+	} else {
+		appLogger.Info("Connected to MySQL database successfully")
 	}
 
 	// 4. Initialize Redis Client Pool
@@ -74,12 +78,17 @@ func main() {
 		}
 	}
 
-	// 5. Initialize Infrastructure Layer
+	// 5. Initialize Infrastructure Layer (Auth & RBAC)
 	pwdHasher := authPassword.NewBcryptHasher()
 	jwtService := authJWT.NewJWTService(cfg.JWT)
 
 	var userRepo = authPersistence.NewMySQLUserRepository(mysqlDB.DB)
 	var tokenRepo = authPersistence.NewRedisTokenRepository(redisClient.Client)
+
+	// RBAC Infrastructure
+	roleRepo := rbacPersistence.NewMySQLRoleRepository(mysqlDB.DB)
+	permissionRepo := rbacPersistence.NewMySQLPermissionRepository(mysqlDB.DB)
+	permCache := rbacCache.NewRedisPermissionCache(redisClient.Client)
 
 	// Health Checkers
 	mysqlChecker := healthInfra.NewMySQLChecker(mysqlDB)
@@ -94,6 +103,13 @@ func main() {
 		jwtService,
 		cfg.JWT.RefreshTokenTTL,
 	)
+	rbacService := rbacApp.NewRBACService(roleRepo, permissionRepo, permCache)
+
+	// Run Idempotent RBAC Database Seeder on Startup
+	seeder := rbacPersistence.NewSeeder(roleRepo, permissionRepo)
+	if seedErr := seeder.Seed(context.Background()); seedErr != nil {
+		appLogger.Warn("Database seeder failed during startup (will retry on next boot)", slog.String("error", seedErr.Error()))
+	}
 
 	// 7. Initialize Delivery Handlers
 	healthHdlr := healthHTTP.NewHandler(healthService)
@@ -109,6 +125,7 @@ func main() {
 	apiV1 := server.Engine.Group("/api/v1")
 	{
 		authHTTP.RegisterRoutes(apiV1, authHdlr, jwtService)
+		rbacHTTP.RegisterRoutes(apiV1, jwtService, rbacService)
 	}
 
 	// 9. Run HTTP Server with Graceful Shutdown

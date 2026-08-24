@@ -1,0 +1,514 @@
+openapi: 3.0.3
+info:
+  title: Enterprise Go REST API Boilerplate
+  version: 1.0.0
+  description: Production-Ready Go REST API with Clean Architecture, Feature-Driven Slices, JWT Authentication, and RBAC Authorization.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  # Health Probes
+  /health:
+    get:
+      summary: Overall System Health
+      tags: [Health]
+      responses:
+        '200':
+          description: System healthy
+        '503':
+          description: System unhealthy
+  /health/live:
+    get:
+      summary: Liveness Probe
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is live
+  /health/ready:
+    get:
+      summary: Readiness Probe
+      tags: [Health]
+      responses:
+        '200':
+          description: Dependencies (MySQL, Redis) are healthy
+        '503':
+          description: One or more dependencies are unavailable
+
+  # Authentication Endpoints
+  /api/v1/auth/register:
+    post:
+      summary: Register new user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: "securePassword123"
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Validation error
+        '409':
+          description: Email already exists
+
+  /api/v1/auth/login:
+    post:
+      summary: Login user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  example: "securePassword123"
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid email or password
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh access token (with token rotation)
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+        '401':
+          description: Invalid or expired refresh token
+
+  /api/v1/auth/logout:
+    post:
+      summary: Logout and revoke refresh token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /api/v1/auth/me:
+    get:
+      summary: Get authenticated user profile
+      tags: [Authentication]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+        '401':
+          description: Unauthorized
+
+  /api/v1/auth/me/permissions:
+    get:
+      summary: Get current authenticated user effective permissions
+      tags: [RBAC - User]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User effective permissions list
+        '401':
+          description: Unauthorized
+
+  # RBAC - Role Management
+  /api/v1/roles:
+    get:
+      summary: List roles (paginated)
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of roles
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (Requires role:read permission)
+    post:
+      summary: Create new role
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "editor"
+                description:
+                  type: string
+                  example: "Content editor"
+      responses:
+        '201':
+          description: Role created successfully
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden (Requires role:create permission)
+        '409':
+          description: Role name already exists
+
+  /api/v1/roles/{id}:
+    get:
+      summary: Get role by ID
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role details
+        '403':
+          description: Forbidden (Requires role:read permission)
+        '404':
+          description: Role not found
+    put:
+      summary: Update role
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "senior-editor"
+                description:
+                  type: string
+                  example: "Senior content editor"
+      responses:
+        '200':
+          description: Role updated successfully
+        '403':
+          description: Forbidden (Requires role:update permission)
+        '404':
+          description: Role not found
+    delete:
+      summary: Delete role (System roles cannot be deleted)
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role deleted successfully
+        '403':
+          description: Forbidden (Requires role:delete permission)
+        '422':
+          description: Cannot delete system protected role
+
+  /api/v1/roles/{id}/permissions:
+    get:
+      summary: Get permissions assigned to role
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role with assigned permissions
+        '403':
+          description: Forbidden (Requires role:read permission)
+    put:
+      summary: Assign permissions to role (Transactional)
+      tags: [RBAC - Roles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permission_ids]
+              properties:
+                permission_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Role permissions updated successfully
+        '403':
+          description: Forbidden (Requires role:update permission)
+
+  # RBAC - Permission Management
+  /api/v1/permissions:
+    get:
+      summary: List permissions (paginated)
+      tags: [RBAC - Permissions]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of permissions
+        '403':
+          description: Forbidden (Requires permission:read permission)
+    post:
+      summary: Create new permission
+      tags: [RBAC - Permissions]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action]
+              properties:
+                resource:
+                  type: string
+                  example: "article"
+                action:
+                  type: string
+                  example: "publish"
+                description:
+                  type: string
+                  example: "Publish articles"
+      responses:
+        '201':
+          description: Permission created successfully
+        '403':
+          description: Forbidden (Requires permission:create permission)
+        '409':
+          description: Permission already exists
+
+  /api/v1/permissions/{id}:
+    get:
+      summary: Get permission by ID
+      tags: [RBAC - Permissions]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Permission details
+        '403':
+          description: Forbidden (Requires permission:read permission)
+        '404':
+          description: Permission not found
+    put:
+      summary: Update permission
+      tags: [RBAC - Permissions]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action]
+              properties:
+                resource:
+                  type: string
+                action:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Permission updated successfully
+        '403':
+          description: Forbidden (Requires permission:update permission)
+    delete:
+      summary: Delete permission
+      tags: [RBAC - Permissions]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Permission deleted successfully
+        '403':
+          description: Forbidden (Requires permission:delete permission)
+
+  # RBAC - User Roles Assignment
+  /api/v1/users/{id}/roles:
+    get:
+      summary: Get roles assigned to a user
+      tags: [RBAC - User]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of user roles
+        '403':
+          description: Forbidden (Requires role:read permission)
+    put:
+      summary: Assign roles to a user (Transactional)
+      tags: [RBAC - User]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_ids]
+              properties:
+                role_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: User roles assigned successfully
+        '403':
+          description: Forbidden (Requires user:assign-role permission)
+
+  /api/v1/users/{id}/permissions:
+    get:
+      summary: Get effective permissions for a user
+      tags: [RBAC - User]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User effective permissions
+        '403':
+          description: Forbidden (Requires permission:read permission)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
