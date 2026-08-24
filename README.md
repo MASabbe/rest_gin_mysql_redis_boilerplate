@@ -170,11 +170,28 @@ Run test suite with code coverage report:
 make test-cover
 ```
 
+Run static security analysis & secret scanner:
+```bash
+make security
+```
+
+Run complete quality gate verification:
+```bash
+make verify
+```
+
 Format and static analysis:
 ```bash
 make fmt
 make vet
+make lint
 ```
+
+---
+
+## Production Deployment & CI/CD
+
+For detailed production deployment sequences, zero-downtime database migration strategies, immutable image tagging, rollback procedures, and environment variables, refer to the [Deployment & Production Delivery Guide](docs/deployment.md).
 
 ---
 

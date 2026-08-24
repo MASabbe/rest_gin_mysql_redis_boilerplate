@@ -1,7 +1,7 @@
 # ---------------------------------------------------------
 # Build Stage
 # ---------------------------------------------------------
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /build
 
@@ -23,10 +23,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # ---------------------------------------------------------
 # Production Runtime Stage
 # ---------------------------------------------------------
-FROM alpine:3.19
+FROM alpine:3.20
 
-# Security: Create non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Security: Create non-root user and group (UID/GID 10001)
+RUN addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup
 
 WORKDIR /app
 

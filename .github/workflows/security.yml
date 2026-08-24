@@ -1,0 +1,39 @@
+name: Security & Vulnerability Scanning
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '0 4 * * 1' # Weekly on Mondays at 04:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security:
+    name: Automated Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Secret & Credential Leak Scan
+        run: go run ./scripts/security_check.go
+
+      - name: Static Security Analysis (gosec)
+        run: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet ./...
+
+      - name: Dependency Vulnerability Check (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        continue-on-error: true # Notifies on CVE findings without breaking un-patchable upstream stdlib warnings
