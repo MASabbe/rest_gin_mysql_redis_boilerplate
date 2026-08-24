@@ -10,14 +10,16 @@ import (
 type ErrorType string
 
 const (
-	TypeValidation     ErrorType = "VALIDATION_ERROR"
-	TypeUnauthorized   ErrorType = "UNAUTHORIZED"
-	TypeForbidden      ErrorType = "FORBIDDEN"
-	TypeNotFound       ErrorType = "NOT_FOUND"
-	TypeConflict       ErrorType = "CONFLICT"
-	TypeBusiness       ErrorType = "BUSINESS_ERROR"
-	TypeInternal       ErrorType = "INTERNAL_ERROR"
-	TypeInfrastructure ErrorType = "INFRASTRUCTURE_ERROR"
+	TypeValidation        ErrorType = "VALIDATION_ERROR"
+	TypeUnauthorized      ErrorType = "UNAUTHORIZED"
+	TypeForbidden         ErrorType = "FORBIDDEN"
+	TypeNotFound          ErrorType = "NOT_FOUND"
+	TypeConflict          ErrorType = "CONFLICT"
+	TypeBusiness          ErrorType = "BUSINESS_ERROR"
+	TypePayloadTooLarge   ErrorType = "PAYLOAD_TOO_LARGE"
+	TypeRateLimitExceeded ErrorType = "RATE_LIMIT_EXCEEDED"
+	TypeInternal          ErrorType = "INTERNAL_ERROR"
+	TypeInfrastructure    ErrorType = "INFRASTRUCTURE_ERROR"
 )
 
 // FieldError represents a specific field-level validation issue.
@@ -133,6 +135,24 @@ func NewConflictError(message string, err ...error) *AppError {
 	}
 }
 
+// NewPayloadTooLargeError creates a 413 Payload Too Large error.
+func NewPayloadTooLargeError(message string, err ...error) *AppError {
+	if message == "" {
+		message = "Request payload exceeds maximum allowed size"
+	}
+	var underlying error
+	if len(err) > 0 {
+		underlying = err[0]
+	}
+	return &AppError{
+		Type:       TypePayloadTooLarge,
+		Code:       "PAYLOAD_TOO_LARGE",
+		Message:    message,
+		HTTPStatus: http.StatusRequestEntityTooLarge,
+		Err:        underlying,
+	}
+}
+
 // NewBusinessError creates a 422 Unprocessable Entity business error.
 func NewBusinessError(code, message string, err ...error) *AppError {
 	if code == "" {
@@ -147,6 +167,24 @@ func NewBusinessError(code, message string, err ...error) *AppError {
 		Code:       code,
 		Message:    message,
 		HTTPStatus: http.StatusUnprocessableEntity,
+		Err:        underlying,
+	}
+}
+
+// NewRateLimitExceededError creates a 429 Too Many Requests error.
+func NewRateLimitExceededError(message string, err ...error) *AppError {
+	if message == "" {
+		message = "Rate limit exceeded, please retry later"
+	}
+	var underlying error
+	if len(err) > 0 {
+		underlying = err[0]
+	}
+	return &AppError{
+		Type:       TypeRateLimitExceeded,
+		Code:       "RATE_LIMIT_EXCEEDED",
+		Message:    message,
+		HTTPStatus: http.StatusTooManyRequests,
 		Err:        underlying,
 	}
 }

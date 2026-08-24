@@ -24,6 +24,11 @@ func TestConfig_Load_DefaultAndValidation(t *testing.T) {
 	assert.Equal(t, "0.0.0.0:8080", cfg.Server.Address())
 	assert.Equal(t, "127.0.0.1:6379", cfg.Redis.Address())
 	assert.Contains(t, cfg.MySQL.DSN(), "root:@tcp(127.0.0.1:3306)/app_db")
+	assert.Equal(t, 5*time.Second, cfg.Server.ReadHeaderTimeout)
+	assert.Equal(t, int64(2*1024*1024), cfg.Server.MaxBodySizeBytes)
+	assert.True(t, cfg.RateLimit.Enabled)
+	assert.Equal(t, 100, cfg.RateLimit.GeneralLimit)
+	assert.Equal(t, 10, cfg.RateLimit.AuthLimit)
 	assert.Equal(t, 15*time.Minute, cfg.JWT.AccessTokenTTL)
 	assert.Equal(t, 7*24*time.Hour, cfg.JWT.RefreshTokenTTL)
 }

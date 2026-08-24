@@ -14,6 +14,7 @@ func TestAppError_Constructors(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, valErr.HTTPStatus)
 	assert.Equal(t, appErrors.TypeValidation, valErr.Type)
 	assert.Len(t, valErr.Details, 1)
+	assert.Contains(t, valErr.Error(), "invalid input")
 
 	unauthErr := appErrors.NewUnauthorizedError("invalid token")
 	assert.Equal(t, http.StatusUnauthorized, unauthErr.HTTPStatus)
@@ -27,6 +28,14 @@ func TestAppError_Constructors(t *testing.T) {
 	conflictErr := appErrors.NewConflictError("email already registered")
 	assert.Equal(t, http.StatusConflict, conflictErr.HTTPStatus)
 
+	payloadErr := appErrors.NewPayloadTooLargeError("file too big")
+	assert.Equal(t, http.StatusRequestEntityTooLarge, payloadErr.HTTPStatus)
+	assert.Equal(t, appErrors.TypePayloadTooLarge, payloadErr.Type)
+
+	rateErr := appErrors.NewRateLimitExceededError("too fast")
+	assert.Equal(t, http.StatusTooManyRequests, rateErr.HTTPStatus)
+	assert.Equal(t, appErrors.TypeRateLimitExceeded, rateErr.Type)
+
 	bizErr := appErrors.NewBusinessError("INSUFFICIENT_BALANCE", "balance too low")
 	assert.Equal(t, http.StatusUnprocessableEntity, bizErr.HTTPStatus)
 
@@ -36,6 +45,7 @@ func TestAppError_Constructors(t *testing.T) {
 	internalErr := appErrors.NewInternalError("panic occurred", errors.New("raw db error"))
 	assert.Equal(t, http.StatusInternalServerError, internalErr.HTTPStatus)
 	assert.Equal(t, "raw db error", internalErr.Unwrap().Error())
+	assert.Contains(t, internalErr.Error(), "raw db error")
 }
 
 func TestAsAppError(t *testing.T) {

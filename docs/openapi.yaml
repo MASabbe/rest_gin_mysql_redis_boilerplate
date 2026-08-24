@@ -506,9 +506,226 @@ paths:
         '403':
           description: Forbidden (Requires permission:read permission)
 
+  # Articles Module (Canonical Reference Feature)
+  /api/v1/articles:
+    get:
+      summary: List articles (paginated with sorting and filters)
+      tags: [Articles]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, title, updated_at, status]
+            default: created_at
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, archived]
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of articles
+    post:
+      summary: Create new article
+      tags: [Articles]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title:
+                  type: string
+                  example: "Architecting Go Microservices"
+                content:
+                  type: string
+                  example: "Detailed guide to scalable Go backend design."
+      responses:
+        '201':
+          description: Article created successfully
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden (Requires article:create permission)
+
+  /api/v1/articles/{id}:
+    get:
+      summary: Get article by ID
+      tags: [Articles]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Article details
+        '404':
+          description: Article not found
+    put:
+      summary: Update article
+      tags: [Articles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+                status:
+                  type: string
+                  enum: [draft, published, archived]
+      responses:
+        '200':
+          description: Article updated successfully
+        '403':
+          description: Forbidden (Requires article:update permission or author ownership)
+        '404':
+          description: Article not found
+    delete:
+      summary: Delete article
+      tags: [Articles]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Article deleted successfully
+        '403':
+          description: Forbidden (Requires article:delete permission or author ownership)
+        '404':
+          description: Article not found
+
+  /api/v1/articles/slug/{slug}:
+    get:
+      summary: Get article by slug
+      tags: [Articles]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Article details
+        '404':
+          description: Article not found
+
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Unique UUID key to safely retry mutation requests without duplicate execution
+      required: false
+      schema:
+        type: string
+        format: uuid
+  headers:
+    X-RateLimit-Limit:
+      description: Request quota per minute
+      schema:
+        type: integer
+    X-RateLimit-Remaining:
+      description: Remaining quota in current window
+      schema:
+        type: integer
+    X-RateLimit-Reset:
+      description: Timestamp when quota resets
+      schema:
+        type: integer
+    Retry-After:
+      description: Seconds to wait before retrying (on 429)
+      schema:
+        type: integer
+    X-Idempotent-Replay:
+      description: True if response was served directly from idempotency cache
+      schema:
+        type: boolean
+  responses:
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "rate limit exceeded, retry after 32 seconds"
+    PayloadTooLarge:
+      description: Request body exceeds maximum allowed size
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: "payload exceeds maximum allowed limit"
+
+

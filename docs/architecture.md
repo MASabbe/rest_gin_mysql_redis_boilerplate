@@ -32,16 +32,19 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 ```text
 .
 ├── cmd/
-│   └── api/
-│       └── main.go                  # Main entry point & DI container
+│   ├── api/
+│   │   └── main.go                  # Main entry point & DI container
+│   └── scaffold/
+│       └── main.go                  # Feature scaffolding CLI generator
 ├── internal/
 │   ├── shared/                      # Cross-cutting foundational infrastructure
 │   │   ├── config/                  # Strongly typed config with validation
 │   │   ├── database/                # MySQL connection pool
 │   │   ├── redis/                   # Redis client pool
 │   │   ├── logger/                  # Structured slog logger with secret sanitization
-│   │   ├── middleware/              # RequestID, Logger, Recovery, CORS, Timeout, Auth, RequirePermission
+│   │   ├── middleware/              # Hardening, Auth, RateLimiter, Idempotency, etc.
 │   │   ├── pagination/              # Unified pagination extracting & metadata
+│   │   ├── queryparam/              # Safe query parameter sorting with column allowlists
 │   │   ├── response/                # Unified JSON response contract
 │   │   ├── errors/                  # Strongly typed error hierarchy
 │   │   └── httpserver/              # Server lifecycle and graceful shutdown
@@ -49,18 +52,11 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 │   └── modules/                     # Feature slices
 │       ├── health/                  # Health check probes (Liveness, Readiness)
 │       ├── auth/                    # Authentication & User Management
-│       │   ├── domain/              # Entities, Repository/Service Interfaces
-│       │   ├── application/         # Use cases (Register, Login, Refresh, Logout, Me)
-│       │   ├── infrastructure/      # MySQL, Redis, JWT, Bcrypt implementations
-│       │   └── delivery/            # HTTP Handlers, Request/Response DTOs, Routes
-│       └── rbac/                    # Role-Based Access Control (Phase 3)
-│           ├── domain/              # Role & Permission Entities, Repositories, Authz Service Interface
-│           ├── application/         # Commands, Queries, DTOs, RBAC Application Service
-│           ├── infrastructure/      # MySQL Repositories with Transactions, Redis Cache, Idempotent Seeder
-│           └── delivery/            # Role, Permission & UserRole Handlers, Routes
+│       ├── rbac/                    # Role-Based Access Control (Phase 3)
+│       └── article/                 # Canonical Reference Feature (Phase 4)
 ├── migrations/                      # SQL Schema migrations
 ├── deployments/                     # Container & orchestration definitions
-├── docs/                            # Architecture & OpenAPI specification
+├── docs/                            # Guides, Architecture & OpenAPI specification
 ├── Dockerfile                       # Multi-stage production container
 ├── docker-compose.yml               # Complete stack (API, MySQL 8, Redis 7)
 ├── Makefile                         # DX tooling
@@ -97,7 +93,7 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Role} \longleftrightarrow \text{RolePermissions} \longleftrightarrow \text{Permission}$$
 
 - **Roles**: Logical groupings of permissions (e.g. `admin`, `editor`, `viewer`). Marked with `is_system = true` for immutable application roles.
-- **Permissions**: Atomic authorization rules formatted deterministically as `resource:action` (e.g. `user:read`, `role:create`, `permission:delete`).
+- **Permissions**: Atomic authorization rules formatted deterministically as `resource:action` (e.g. `user:read`, `role:create`, `permission:delete`, `article:create`).
 - **Separation of Concerns**:
   - **Authentication** answers: *Who are you?* (Handled by `AuthMiddleware`).
   - **Authorization** answers: *Are you allowed to perform this operation?* (Handled by `RequirePermission`).
@@ -116,7 +112,33 @@ $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Rol
 
 ---
 
-## 5. API Standard Contract
+## 5. Production Hardening & Resilience (Phase 5)
+
+### HTTP Server Protections
+- **ReadHeaderTimeout**: Set to 5 seconds to mitigate Slowloris denial-of-service attacks.
+- **MaxBodySize**: Enforced via `http.MaxBytesReader` (default 2MB) responding with `413 Payload Too Large`.
+- **Security Headers**: Injects `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+
+### Ordered Graceful Shutdown
+1. `SIGINT`/`SIGTERM` received $\rightarrow$ HTTP server stops accepting incoming connections.
+2. Active HTTP requests drain gracefully up to `ShutdownTimeout` (default 10s).
+3. MySQL connection pool is closed cleanly.
+4. Redis client connections are closed cleanly.
+
+### Distributed Rate Limiting
+- Backed by Redis sliding 1-minute window counters.
+- **Auth Tier**: 10 requests/minute on `/api/v1/auth/*`.
+- **General Tier**: 100 requests/minute on `/api/v1/*`.
+- Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`.
+
+### Idempotency Engine (`Idempotency-Key`)
+- Mutation requests (`POST`, `PUT`, `PATCH`, `DELETE`) with `Idempotency-Key` are fingerprinted via SHA-256 (`method + path + body`).
+- Prevents duplicate side-effects from network retries by returning cached responses (`X-Idempotent-Replay: true`).
+- Detects payload tampering with identical keys (`422 Unprocessable Entity`).
+
+---
+
+## 6. API Standard Contract
 
 ### Success Response
 ```json
@@ -146,15 +168,17 @@ $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Rol
 
 ---
 
-## 6. Centralized Error Hierarchy
+## 7. Centralized Error Hierarchy
 
 | Error Type | HTTP Status | Code | Typical Use Case |
 |---|---|---|---|
 | `ValidationError` | 400 Bad Request | `VALIDATION_ERROR` | Malformed payload, invalid field constraints |
 | `UnauthorizedError` | 401 Unauthorized | `UNAUTHORIZED` | Invalid/expired token, wrong credentials |
-| `ForbiddenError` | 403 Forbidden | `FORBIDDEN` | Missing required RBAC permission |
+| `ForbiddenError` | 403 Forbidden | `FORBIDDEN` | Missing required RBAC permission or author ownership |
 | `NotFoundError` | 404 Not Found | `NOT_FOUND` | User, role, or entity does not exist |
-| `ConflictError` | 409 Conflict | `CONFLICT` | Duplicate email, role name, or unique constraint violation |
-| `BusinessError` | 422 Unprocessable | Custom code | Business rule violation (e.g. attempting to delete system role) |
+| `ConflictError` | 409 Conflict | `CONFLICT` | Duplicate email, unique slug, or concurrent idempotency in progress |
+| `PayloadTooLarge` | 413 Payload Too Large | `PAYLOAD_TOO_LARGE` | Request body exceeds maximum allowed size |
+| `BusinessError` | 422 Unprocessable | Custom code | Business rule violation or idempotency payload mismatch |
+| `RateLimitExceeded` | 429 Too Many Requests | `RATE_LIMIT_EXCEEDED` | Request rate exceeded within 1-minute window |
 | `InfrastructureError`| 503 Service Unavailable | `SERVICE_UNAVAILABLE` | Database/Redis connection down |
 | `InternalError` | 500 Internal Error | `INTERNAL_SERVER_ERROR` | Panics, unexpected system failures |

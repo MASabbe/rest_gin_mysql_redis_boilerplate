@@ -51,6 +51,11 @@ docker-down:
 docker-logs:
 	docker-compose logs -f
 
+## feature: Scaffold a new canonical feature module (e.g. make feature NAME=product)
+feature:
+	go run ./cmd/scaffold -name=$(NAME)
+
 ## clean: Remove build artifacts and coverage files
 clean:
 	rm -rf bin coverage.out
+

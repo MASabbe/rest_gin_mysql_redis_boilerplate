@@ -12,6 +12,12 @@ Enterprise-grade Go backend boilerplate architected with **Clean Architecture** 
 - **Caching & Sessions**: Redis for high-speed token revocation and RBAC permission caching.
 - **Authentication**: JWT Access/Refresh tokens with cryptographic token rotation, UUID JTI, and algorithm enforcement.
 - **Authorization & RBAC**: Fine-grained deterministic permission middleware (`RequirePermission("resource:action")`), system role protections, idempotent seeder.
+- **Canonical Feature Template**: Reference module (`articles`) demonstrating full CRUD, safe sorting allowlists, filtering, and pagination.
+- **Developer Scaffolding**: Instant feature code generation via `make feature NAME=<name>`.
+- **Production Hardening**: Slowloris protection (`ReadHeaderTimeout`), strict request body size limits (`413 Payload Too Large`), OWASP security headers (`nosniff`, `DENY`, `strict-origin-when-cross-origin`, strict CSP).
+- **Distributed Rate Limiting**: Redis-backed rate limiting with dual tiers (general API tier: 100 req/min, auth tier: 10 req/min) returning standardized `429 Too Many Requests` with retry headers.
+- **Idempotency Engine**: Redis-backed `Idempotency-Key` middleware with SHA-256 fingerprinting preventing duplicate side effects from client retries.
+- **Ordered Graceful Teardown**: Coordinated shutdown draining in-flight requests before executing MySQL and Redis cleanup handlers.
 - **Password Security**: Bcrypt hashing with secure cost factor and constant-time verification.
 - **Observability**: Go stdlib `log/slog` structured logging, Request-ID tracing, and health check probes (`/health`, `/health/live`, `/health/ready`).
 - **Resilience**: Panic recovery middleware, request timeout, graceful shutdown on `SIGINT`/`SIGTERM`.
@@ -24,8 +30,10 @@ Enterprise-grade Go backend boilerplate architected with **Clean Architecture** 
 ```text
 .
 ├── cmd/
-│   └── api/
-│       └── main.go                  # Main entry point & DI container
+│   ├── api/
+│   │   └── main.go                  # Main entry point & DI container
+│   └── scaffold/
+│       └── main.go                  # Feature scaffolding CLI generator
 ├── internal/
 │   ├── shared/                      # Cross-cutting foundational infrastructure
 │   │   ├── config/                  # Strongly typed config with validation
@@ -34,6 +42,7 @@ Enterprise-grade Go backend boilerplate architected with **Clean Architecture** 
 │   │   ├── logger/                  # Structured slog logger with secret sanitization
 │   │   ├── middleware/              # RequestID, Logger, Recovery, CORS, Timeout, Auth, RequirePermission
 │   │   ├── pagination/              # Unified pagination extracting & metadata
+│   │   ├── queryparam/              # Safe query parameter sorting with column allowlists
 │   │   ├── response/                # Unified JSON response contract
 │   │   ├── errors/                  # Strongly typed error hierarchy
 │   │   └── httpserver/              # Server lifecycle and graceful shutdown
@@ -41,17 +50,14 @@ Enterprise-grade Go backend boilerplate architected with **Clean Architecture** 
 │   └── modules/                     # Feature slices
 │       ├── health/                  # Health check probes (Liveness, Readiness)
 │       ├── auth/                    # Authentication & User Management
-│       │   ├── domain/              # Entities, Repository/Service Interfaces
-│       │   ├── application/         # Use cases (Register, Login, Refresh, Logout, Me)
-│       │   ├── infrastructure/      # MySQL, Redis, JWT, Bcrypt implementations
-│       │   └── delivery/            # HTTP Handlers, Request/Response DTOs, Routes
-│       └── rbac/                    # Role-Based Access Control (Phase 3)
-│           ├── domain/              # Role & Permission Entities, Repositories, Authz Service
-│           ├── application/         # Commands, Queries, DTOs, RBAC Application Service
-│           ├── infrastructure/      # MySQL Repositories with Transactions, Redis Cache, Idempotent Seeder
-│           └── delivery/            # Role, Permission & UserRole Handlers, Routes
+│       ├── rbac/                    # Role-Based Access Control (Phase 3)
+│       └── article/                 # Canonical Reference Feature (Phase 4)
+│           ├── domain/              # Article Entity & Repository Interface
+│           ├── application/         # Commands, Queries, DTOs & Service
+│           ├── infrastructure/      # MySQL Repository & In-Memory Test Repo
+│           └── delivery/            # Handlers, Request/Response & Protected Routes
 ├── migrations/                      # SQL Schema migrations
-├── docs/                            # Architecture & OpenAPI 3.0 specification
+├── docs/                            # Guides, Architecture & OpenAPI 3.0 specification
 ├── Dockerfile                       # Multi-stage production container
 ├── docker-compose.yml               # Complete stack (API, MySQL 8, Redis 7)
 ├── Makefile                         # DX tooling
@@ -86,6 +92,12 @@ make docker-up
 # Start MySQL & Redis if running locally, then:
 make run
 # Or: go run ./cmd/api
+```
+
+### 5. Scaffold a New Feature
+Generate a complete, compiling Clean Architecture module skeleton:
+```bash
+make feature NAME=product
 ```
 
 ---
@@ -127,6 +139,16 @@ make run
 | `PUT` | `/api/v1/users/:id/roles` | Assign roles to user (Transactional) | `user:assign-role` |
 | `GET` | `/api/v1/users/:id/roles` | Get roles assigned to user | `role:read` |
 | `GET` | `/api/v1/users/:id/permissions` | Get effective permissions for user | `permission:read` |
+
+### Articles Module (Reference Feature)
+| Method | Path | Description | Required Permission |
+|---|---|---|:---:|
+| `GET` | `/api/v1/articles` | List articles (paginated with filters & sort) | Public |
+| `GET` | `/api/v1/articles/:id` | Get article by ID | Public |
+| `GET` | `/api/v1/articles/slug/:slug` | Get article by slug | Public |
+| `POST` | `/api/v1/articles` | Create article | `article:create` |
+| `PUT` | `/api/v1/articles/:id` | Update article | `article:update` |
+| `DELETE` | `/api/v1/articles/:id` | Delete article | `article:delete` |
 
 ---
 

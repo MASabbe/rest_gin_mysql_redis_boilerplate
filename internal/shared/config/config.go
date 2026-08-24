@@ -13,11 +13,12 @@ import (
 
 // Config represents the application root configuration.
 type Config struct {
-	App    AppConfig
-	Server ServerConfig
-	MySQL  MySQLConfig
-	Redis  RedisConfig
-	JWT    JWTConfig
+	App       AppConfig
+	Server    ServerConfig
+	MySQL     MySQLConfig
+	Redis     RedisConfig
+	JWT       JWTConfig
+	RateLimit RateLimitConfig
 }
 
 // AppConfig represents general application settings.
@@ -33,18 +34,28 @@ func (c AppConfig) IsProduction() bool {
 
 // ServerConfig represents HTTP server settings.
 type ServerConfig struct {
-	Host            string
-	Port            string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
-	RequestTimeout  time.Duration
-	AllowedOrigins  []string
+	Host              string
+	Port              string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+	RequestTimeout    time.Duration
+	MaxBodySizeBytes  int64
+	AllowedOrigins    []string
 }
 
 func (s ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%s", s.Host, s.Port)
+}
+
+// RateLimitConfig represents distributed rate limiting settings.
+type RateLimitConfig struct {
+	Enabled        bool
+	GeneralLimit   int           // Max requests per minute for general endpoints
+	AuthLimit      int           // Max requests per minute for auth endpoints
+	IdempotencyTTL time.Duration // TTL for cached idempotent responses
 }
 
 // MySQLConfig represents MySQL database connection settings.
@@ -118,14 +129,22 @@ func Load(envFiles ...string) (*Config, error) {
 			LogLevel: getEnv("LOG_LEVEL", "info"),
 		},
 		Server: ServerConfig{
-			Host:            getEnv("SERVER_HOST", "0.0.0.0"),
-			Port:            getEnv("SERVER_PORT", "8080"),
-			ReadTimeout:     getDurationEnv("SERVER_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:    getDurationEnv("SERVER_WRITE_TIMEOUT", 15*time.Second),
-			IdleTimeout:     getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),
-			ShutdownTimeout: getDurationEnv("SERVER_SHUTDOWN_TIMEOUT", 10*time.Second),
-			RequestTimeout:  getDurationEnv("SERVER_REQUEST_TIMEOUT", 30*time.Second),
-			AllowedOrigins:  splitAndTrim(getEnv("SERVER_CORS_ALLOWED_ORIGINS", "*"), ","),
+			Host:              getEnv("SERVER_HOST", "0.0.0.0"),
+			Port:              getEnv("SERVER_PORT", "8080"),
+			ReadHeaderTimeout: getDurationEnv("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
+			ReadTimeout:       getDurationEnv("SERVER_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout:      getDurationEnv("SERVER_WRITE_TIMEOUT", 15*time.Second),
+			IdleTimeout:       getDurationEnv("SERVER_IDLE_TIMEOUT", 60*time.Second),
+			ShutdownTimeout:   getDurationEnv("SERVER_SHUTDOWN_TIMEOUT", 10*time.Second),
+			RequestTimeout:    getDurationEnv("SERVER_REQUEST_TIMEOUT", 30*time.Second),
+			MaxBodySizeBytes:  int64(getIntEnv("SERVER_MAX_BODY_SIZE_BYTES", 2*1024*1024)), // Default 2MB
+			AllowedOrigins:    splitAndTrim(getEnv("SERVER_CORS_ALLOWED_ORIGINS", "*"), ","),
+		},
+		RateLimit: RateLimitConfig{
+			Enabled:        getBoolEnv("RATE_LIMIT_ENABLED", true),
+			GeneralLimit:   getIntEnv("RATE_LIMIT_GENERAL_LIMIT", 100),
+			AuthLimit:      getIntEnv("RATE_LIMIT_AUTH_LIMIT", 10),
+			IdempotencyTTL: getDurationEnv("IDEMPOTENCY_TTL", 24*time.Hour),
 		},
 		MySQL: MySQLConfig{
 			Host:            getEnv("MYSQL_HOST", "127.0.0.1"),
@@ -204,6 +223,18 @@ func (c *Config) Validate() error {
 func getEnv(key, defaultVal string) string {
 	val := os.Getenv(key)
 	if val == "" {
+		return defaultVal
+	}
+	return val
+}
+
+func getBoolEnv(key string, defaultVal bool) bool {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.ParseBool(valStr)
+	if err != nil {
 		return defaultVal
 	}
 	return val

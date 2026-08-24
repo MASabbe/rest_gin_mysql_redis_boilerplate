@@ -31,6 +31,12 @@ var CorePermissions = []PermissionDefinition{
 
 	// User RBAC assignment permissions
 	{Resource: "user", Action: "assign-role", Description: "Assign and revoke roles for users"},
+
+	// Article module permissions
+	{Resource: "article", Action: "read", Description: "View and list articles"},
+	{Resource: "article", Action: "create", Description: "Create new articles"},
+	{Resource: "article", Action: "update", Description: "Update articles"},
+	{Resource: "article", Action: "delete", Description: "Delete articles"},
 }
 
 // Seeder handles idempotent database seeding for RBAC foundation data.

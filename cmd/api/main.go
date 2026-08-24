@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"os"
 
+	articleApp "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/article/application"
+	articleHTTP "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/article/delivery/http"
+	articlePersistence "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/article/infrastructure/persistence"
 	authApp "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/application"
 	authHTTP "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/delivery/http"
 	authHandler "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/delivery/http/handler"
@@ -23,7 +26,9 @@ import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/database"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/httpserver"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/logger"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/middleware"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/redis"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -48,11 +53,6 @@ func main() {
 		appLogger.Error("FATAL: Failed to initialize MySQL connection pool", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	defer func() {
-		if closeErr := mysqlDB.Close(); closeErr != nil {
-			appLogger.Error("Error closing MySQL connection", slog.String("error", closeErr.Error()))
-		}
-	}()
 
 	if pingErr := mysqlDB.Ping(context.Background()); pingErr != nil {
 		appLogger.Warn("MySQL ping check failed during startup (will be verified by readiness probes)", slog.String("error", pingErr.Error()))
@@ -65,12 +65,6 @@ func main() {
 	if err != nil {
 		appLogger.Error("Failed to initialize Redis client", slog.String("error", err.Error()))
 	} else {
-		defer func() {
-			if closeErr := redisClient.Close(); closeErr != nil {
-				appLogger.Error("Error closing Redis client", slog.String("error", closeErr.Error()))
-			}
-		}()
-
 		if pingErr := redisClient.Ping(context.Background()); pingErr != nil {
 			appLogger.Warn("Redis ping check failed during startup (will be verified by readiness probes)", slog.String("error", pingErr.Error()))
 		} else {
@@ -90,6 +84,9 @@ func main() {
 	permissionRepo := rbacPersistence.NewMySQLPermissionRepository(mysqlDB.DB)
 	permCache := rbacCache.NewRedisPermissionCache(redisClient.Client)
 
+	// Article Infrastructure
+	articleRepo := articlePersistence.NewMySQLArticleRepository(mysqlDB.DB)
+
 	// Health Checkers
 	mysqlChecker := healthInfra.NewMySQLChecker(mysqlDB)
 	redisChecker := healthInfra.NewRedisChecker(redisClient)
@@ -104,6 +101,7 @@ func main() {
 		cfg.JWT.RefreshTokenTTL,
 	)
 	rbacService := rbacApp.NewRBACService(roleRepo, permissionRepo, permCache)
+	articleService := articleApp.NewArticleService(articleRepo)
 
 	// Run Idempotent RBAC Database Seeder on Startup
 	seeder := rbacPersistence.NewSeeder(roleRepo, permissionRepo)
@@ -118,14 +116,41 @@ func main() {
 	// 8. Initialize HTTP Server & Routes
 	server := httpserver.New(cfg.App, cfg.Server)
 
-	// Register Health Routes
+	// Register teardown cleanups (executed in order after HTTP server drains)
+	server.RegisterCleanup(func(ctx context.Context) error {
+		appLogger.Info("Closing MySQL connection pool...")
+		return mysqlDB.Close()
+	})
+	if redisClient != nil {
+		server.RegisterCleanup(func(ctx context.Context) error {
+			appLogger.Info("Closing Redis client...")
+			return redisClient.Close()
+		})
+	}
+
+	// Register Health Routes (unmetered for fast liveness/readiness probes)
 	healthHdlr.RegisterRoutes(server.Engine)
 
 	// Register API v1 Routes
+	var redisClientRaw *goredis.Client
+	if redisClient != nil {
+		redisClientRaw = redisClient.Client
+	}
+
 	apiV1 := server.Engine.Group("/api/v1")
+	if cfg.RateLimit.Enabled {
+		apiV1.Use(middleware.RateLimiter(redisClientRaw, cfg.RateLimit.GeneralLimit, "general"))
+	}
+	apiV1.Use(middleware.Idempotency(redisClientRaw, cfg.RateLimit.IdempotencyTTL))
 	{
-		authHTTP.RegisterRoutes(apiV1, authHdlr, jwtService)
+		authGroup := apiV1.Group("")
+		if cfg.RateLimit.Enabled {
+			authGroup.Use(middleware.RateLimiter(redisClientRaw, cfg.RateLimit.AuthLimit, "auth"))
+		}
+		authHTTP.RegisterRoutes(authGroup, authHdlr, jwtService)
+
 		rbacHTTP.RegisterRoutes(apiV1, jwtService, rbacService)
+		articleHTTP.RegisterRoutes(apiV1, jwtService, rbacService, articleService)
 	}
 
 	// 9. Run HTTP Server with Graceful Shutdown
