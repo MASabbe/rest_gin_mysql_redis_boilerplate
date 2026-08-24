@@ -1,1 +1,133 @@
-# go_rest_api
+# Production-Ready Go REST API Boilerplate
+
+Enterprise-grade Go backend boilerplate architected with **Clean Architecture** and **Feature-Driven Architecture** using **Gin**, **MySQL**, **Redis**, and **JWT**.
+
+---
+
+## Features
+
+- **Architecture**: Clean Architecture + Feature-Driven Vertical Slices (Delivery $\rightarrow$ Application $\rightarrow$ Domain).
+- **Framework**: High performance Gin Web Framework.
+- **Database**: MySQL with connection pooling, migrations, and repository pattern.
+- **Caching & Sessions**: Redis for high-speed token revocation and session management.
+- **Authentication**: JWT Access/Refresh tokens with cryptographic token rotation, UUID JTI, and algorithm enforcement.
+- **Password Security**: Bcrypt hashing with secure cost factor and constant-time verification.
+- **Observability**: Go stdlib `log/slog` structured logging, Request-ID tracing, and health check probes (`/health`, `/health/live`, `/health/ready`).
+- **Resilience**: Panic recovery middleware, request timeout, graceful shutdown on `SIGINT`/`SIGTERM`.
+- **Developer Experience**: Comprehensive `Makefile`, typed error hierarchy, unified JSON response envelope, multi-stage minimal Docker container.
+
+---
+
+## Directory Structure
+
+```text
+.
+├── cmd/
+│   └── api/
+│       └── main.go                  # Main entry point & DI container
+├── internal/
+│   ├── shared/                      # Cross-cutting foundational infrastructure
+│   │   ├── config/                  # Strongly typed config with validation
+│   │   ├── database/                # MySQL connection pool
+│   │   ├── redis/                   # Redis client pool
+│   │   ├── logger/                  # Structured slog logger with secret sanitization
+│   │   ├── middleware/              # RequestID, Logger, Recovery, CORS, Timeout, Auth
+│   │   ├── response/                # Unified JSON response contract
+│   │   ├── errors/                  # Strongly typed error hierarchy
+│   │   └── httpserver/              # Server lifecycle and graceful shutdown
+│   │
+│   └── modules/                     # Feature slices
+│       ├── health/                  # Health check probes (Liveness, Readiness)
+│       └── auth/                    # Authentication & User Management
+│           ├── domain/              # Entities, Repository/Service Interfaces
+│           ├── application/         # Use cases (Register, Login, Refresh, Logout, Me)
+│           ├── infrastructure/      # MySQL, Redis, JWT, Bcrypt implementations
+│           └── delivery/            # HTTP Handlers, Request/Response DTOs, Routes
+├── migrations/                      # SQL Schema migrations
+├── docs/                            # Architecture & design documentation
+├── Dockerfile                       # Multi-stage production container
+├── docker-compose.yml               # Complete stack (API, MySQL 8, Redis 7)
+├── Makefile                         # DX tooling
+├── .env.example                     # Environment template
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Prerequisites
+- [Go 1.22+](https://golang.org/dl/)
+- [Docker](https://www.docker.com/) & Docker Compose (optional for containerized run)
+- [Make](https://www.gnu.org/software/make/) (optional)
+
+### 2. Environment Configuration
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+### 3. Run with Docker Compose (Recommended)
+Starts API, MySQL 8, and Redis 7 in connected containers with health checks:
+```bash
+make docker-up
+# Or: docker-compose up -d --build
+```
+
+### 4. Run Locally
+```bash
+# Start MySQL & Redis if running locally, then:
+make run
+# Or: go run ./cmd/api
+```
+
+---
+
+## API Endpoints
+
+### Health Module
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Overall system health overview |
+| `GET` | `/health/live` | Liveness probe (shallow check for k8s/docker) |
+| `GET` | `/health/ready` | Readiness probe (deep check: MySQL + Redis) |
+
+### Authentication Module
+| Method | Path | Description | Protected |
+|---|---|---|:---:|
+| `POST` | `/api/v1/auth/register` | Register new user account | No |
+| `POST` | `/api/v1/auth/login` | Login and receive token pair | No |
+| `POST` | `/api/v1/auth/refresh` | Refresh tokens (with Token Rotation) | No |
+| `POST` | `/api/v1/auth/logout` | Revoke active refresh token | No |
+| `GET` | `/api/v1/auth/me` | Fetch authenticated user profile | **Yes** (Bearer) |
+
+---
+
+## Testing & Quality Gates
+
+Run all unit tests:
+```bash
+make test
+```
+
+Run test suite with race detector:
+```bash
+make test-race
+```
+
+Run test suite with code coverage report:
+```bash
+make test-cover
+```
+
+Format and static analysis:
+```bash
+make fmt
+make vet
+```
+
+---
+
+## License
+
+MIT
