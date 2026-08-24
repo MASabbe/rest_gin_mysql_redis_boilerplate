@@ -9,12 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes registers article endpoints with authentication and permission protection.
+// RegisterRoutes registers article endpoints with authentication, activity tracking, and permission protection.
 func RegisterRoutes(
 	apiGroup *gin.RouterGroup,
 	tokenService authService.TokenService,
 	authzService rbacService.AuthorizationService,
 	articleService application.ArticleService,
+	activityMiddleware ...gin.HandlerFunc,
 ) {
 	hdlr := handler.NewArticleHandler(articleService)
 
@@ -28,6 +29,11 @@ func RegisterRoutes(
 		// Protected endpoints
 		protected := articles.Group("")
 		protected.Use(middleware.AuthMiddleware(tokenService))
+		for _, m := range activityMiddleware {
+			if m != nil {
+				protected.Use(m)
+			}
+		}
 		{
 			protected.POST("", middleware.RequirePermission(authzService, "article:create"), hdlr.Create)
 			protected.PUT("/:id", middleware.RequirePermission(authzService, "article:update"), hdlr.Update)

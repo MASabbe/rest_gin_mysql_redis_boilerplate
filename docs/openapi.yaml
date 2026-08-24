@@ -148,6 +148,42 @@ paths:
       responses:
         '200':
           description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+                        format: email
+                      status:
+                        type: string
+                        example: active
+                      last_login_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        example: "2026-08-24T08:30:15.123456Z"
+                      last_activity_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        example: "2026-08-24T09:15:10.654321Z"
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
         '401':
           description: Unauthorized
 

@@ -8,20 +8,24 @@ import (
 
 // UserDTO represents a sanitized user representation for API responses.
 type UserDTO struct {
-	ID        string            `json:"id"`
-	Email     string            `json:"email"`
-	Status    entity.UserStatus `json:"status"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	ID             string            `json:"id"`
+	Email          string            `json:"email"`
+	Status         entity.UserStatus `json:"status"`
+	LastLoginAt    *time.Time        `json:"last_login_at,omitempty"`
+	LastActivityAt *time.Time        `json:"last_activity_at,omitempty"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 func ToUserDTO(u *entity.User) UserDTO {
 	return UserDTO{
-		ID:        u.ID,
-		Email:     u.Email,
-		Status:    u.Status,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
+		ID:             u.ID,
+		Email:          u.Email,
+		Status:         u.Status,
+		LastLoginAt:    u.LastLoginAt,
+		LastActivityAt: u.LastActivityAt,
+		CreatedAt:      u.CreatedAt,
+		UpdatedAt:      u.UpdatedAt,
 	}
 }
 

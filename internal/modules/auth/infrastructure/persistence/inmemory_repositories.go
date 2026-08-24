@@ -78,6 +78,36 @@ func (r *InMemoryUserRepository) Update(ctx context.Context, user *entity.User) 
 	return nil
 }
 
+func (r *InMemoryUserRepository) UpdateLastLoginAt(ctx context.Context, userID string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	u, exists := r.users[userID]
+	if !exists {
+		return appErrors.NewNotFoundError("user not found for last_login_at update")
+	}
+
+	utcTime := at.UTC()
+	u.LastLoginAt = &utcTime
+	u.UpdatedAt = utcTime
+	return nil
+}
+
+func (r *InMemoryUserRepository) UpdateLastActivityAt(ctx context.Context, userID string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	u, exists := r.users[userID]
+	if !exists {
+		return appErrors.NewNotFoundError("user not found for last_activity_at update")
+	}
+
+	utcTime := at.UTC()
+	u.LastActivityAt = &utcTime
+	u.UpdatedAt = utcTime
+	return nil
+}
+
 // InMemoryTokenRepository is a thread-safe in-memory implementation of TokenRepository.
 type InMemoryTokenRepository struct {
 	mu     sync.RWMutex

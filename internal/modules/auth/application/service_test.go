@@ -83,14 +83,15 @@ func TestAuthService_Register_ValidationFailure(t *testing.T) {
 }
 
 func TestAuthService_Login_Success(t *testing.T) {
-	svc, _ := setupTestAuthService()
+	svc, userRepo := setupTestAuthService()
 	ctx := context.Background()
 
-	_, err := svc.Register(ctx, command.RegisterCommand{
+	regRes, err := svc.Register(ctx, command.RegisterCommand{
 		Email:    "login@example.com",
 		Password: "CorrectPassword123!",
 	})
 	assert.NoError(t, err)
+	assert.Nil(t, regRes.User.LastLoginAt)
 
 	res, err := svc.Login(ctx, command.LoginCommand{
 		Email:    "login@example.com",
@@ -101,6 +102,13 @@ func TestAuthService_Login_Success(t *testing.T) {
 	assert.NotNil(t, res)
 	assert.Equal(t, "login@example.com", res.User.Email)
 	assert.NotEmpty(t, res.Tokens.AccessToken)
+	assert.NotNil(t, res.User.LastLoginAt)
+	assert.Equal(t, time.UTC, res.User.LastLoginAt.Location())
+
+	// Verify persistence
+	savedUser, err := userRepo.FindByID(ctx, res.User.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, savedUser.LastLoginAt)
 }
 
 func TestAuthService_Login_UnknownUser(t *testing.T) {

@@ -145,15 +145,24 @@ func main() {
 		apiV1.Use(middleware.RateLimiter(redisClientRaw, cfg.RateLimit.GeneralLimit, "general"))
 	}
 	apiV1.Use(middleware.Idempotency(redisClientRaw, cfg.RateLimit.IdempotencyTTL))
+
+	// Initialize user activity tracking middleware
+	activityMiddleware := middleware.UserActivityTracker(
+		userRepo,
+		redisClientRaw,
+		cfg.UserActivity.UpdateInterval,
+		cfg.UserActivity.Enabled,
+	)
+
 	{
 		authGroup := apiV1.Group("")
 		if cfg.RateLimit.Enabled {
 			authGroup.Use(middleware.RateLimiter(redisClientRaw, cfg.RateLimit.AuthLimit, "auth"))
 		}
-		authHTTP.RegisterRoutes(authGroup, authHdlr, jwtService)
+		authHTTP.RegisterRoutes(authGroup, authHdlr, jwtService, activityMiddleware)
 
-		rbacHTTP.RegisterRoutes(apiV1, jwtService, rbacService)
-		articleHTTP.RegisterRoutes(apiV1, jwtService, rbacService, articleService)
+		rbacHTTP.RegisterRoutes(apiV1, jwtService, rbacService, activityMiddleware)
+		articleHTTP.RegisterRoutes(apiV1, jwtService, rbacService, articleService, activityMiddleware)
 	}
 
 	// 9. Run HTTP Server with Graceful Shutdown

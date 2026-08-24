@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/repository"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/service"
 	appErrors "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/errors"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/logger"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 )
 
@@ -131,6 +133,16 @@ func (s *authService) Login(ctx context.Context, cmd command.LoginCommand) (*dto
 		metrics.RecordAuthFailure("account_inactive")
 		return nil, appErrors.NewForbiddenError("account is inactive or suspended")
 	}
+
+	// Update last_login_at in UTC (Best-effort audit metadata)
+	loginTime := time.Now().UTC()
+	if err := s.userRepo.UpdateLastLoginAt(ctx, user.ID, loginTime); err != nil {
+		logger.WithContext(ctx).Warn("Failed to update last_login_at for user",
+			slog.String("user_id", user.ID),
+			slog.String("error", err.Error()),
+		)
+	}
+	user.LastLoginAt = &loginTime
 
 	tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {

@@ -13,12 +13,13 @@ import (
 
 // Config represents the application root configuration.
 type Config struct {
-	App       AppConfig
-	Server    ServerConfig
-	MySQL     MySQLConfig
-	Redis     RedisConfig
-	JWT       JWTConfig
-	RateLimit RateLimitConfig
+	App          AppConfig
+	Server       ServerConfig
+	MySQL        MySQLConfig
+	Redis        RedisConfig
+	JWT          JWTConfig
+	RateLimit    RateLimitConfig
+	UserActivity UserActivityConfig
 }
 
 // AppConfig represents general application settings.
@@ -56,6 +57,12 @@ type RateLimitConfig struct {
 	GeneralLimit   int           // Max requests per minute for general endpoints
 	AuthLimit      int           // Max requests per minute for auth endpoints
 	IdempotencyTTL time.Duration // TTL for cached idempotent responses
+}
+
+// UserActivityConfig represents user activity tracking configuration.
+type UserActivityConfig struct {
+	Enabled        bool          // USER_ACTIVITY_TRACKING_ENABLED (default true)
+	UpdateInterval time.Duration // USER_ACTIVITY_UPDATE_INTERVAL (default 5m)
 }
 
 // MySQLConfig represents MySQL database connection settings.
@@ -175,6 +182,10 @@ func Load(envFiles ...string) (*Config, error) {
 			RefreshTokenTTL: getDurationEnv("JWT_REFRESH_TOKEN_TTL", 7*24*time.Hour),
 			Issuer:          getEnv("JWT_ISSUER", "backend-api"),
 			Audience:        getEnv("JWT_AUDIENCE", "backend-api-users"),
+		},
+		UserActivity: UserActivityConfig{
+			Enabled:        getBoolEnv("USER_ACTIVITY_TRACKING_ENABLED", true),
+			UpdateInterval: getDurationEnv("USER_ACTIVITY_UPDATE_INTERVAL", 5*time.Minute),
 		},
 	}
 

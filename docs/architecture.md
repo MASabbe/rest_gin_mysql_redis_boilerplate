@@ -138,6 +138,12 @@ $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Rol
 - Prevents duplicate side-effects from network retries by returning cached responses (`X-Idempotent-Replay: true`).
 - Detects payload tampering with identical keys (`422 Unprocessable Entity`).
 
+### User Activity Tracking & Write Throttling
+- **`last_login_at`**: Updated explicitly in UTC upon successful user authentication (login). Best-effort failure semantics ensure audit update failures do not prevent successful login.
+- **`last_activity_at`**: Recorded on authenticated business requests.
+- **Redis Write Throttling**: Uses atomic `SetNX` on key `user:activity:{user_id}` with TTL `USER_ACTIVITY_UPDATE_INTERVAL` (default 5m). Database writes are only triggered on key acquisition/expiration, preventing high-frequency write storms on MySQL.
+- **Fallback**: If Redis is unavailable, an in-process bounded cache throttles database updates, failing open safely.
+
 ---
 
 ## 6. Observability & Operational Readiness (Phase 6)

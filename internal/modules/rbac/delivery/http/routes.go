@@ -8,11 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes registers RBAC endpoints to the provided Gin router group with Authentication and Permission guards.
+// RegisterRoutes registers RBAC endpoints to the provided Gin router group with Authentication, Activity Tracking, and Permission guards.
 func RegisterRoutes(
 	apiGroup *gin.RouterGroup,
 	tokenService authService.TokenService,
 	rbacService application.RBACService,
+	activityMiddleware ...gin.HandlerFunc,
 ) {
 	roleHdlr := handler.NewRoleHandler(rbacService)
 	permHdlr := handler.NewPermissionHandler(rbacService)
@@ -21,6 +22,11 @@ func RegisterRoutes(
 	// Protected RBAC Root Group (requires valid Bearer token)
 	rbac := apiGroup.Group("")
 	rbac.Use(middleware.AuthMiddleware(tokenService))
+	for _, m := range activityMiddleware {
+		if m != nil {
+			rbac.Use(m)
+		}
+	}
 	{
 		// 1. Roles Management Endpoints
 		roles := rbac.Group("/roles")
