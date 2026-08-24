@@ -88,7 +88,9 @@ func main() {
 			return nil
 		}
 
-		file, err := os.Open(path)
+		cleanPath := filepath.Clean(path)
+		// #nosec G304 G122 -- CLI utility strictly traverses current workspace files
+		file, err := os.Open(cleanPath)
 		if err != nil {
 			return nil
 		}

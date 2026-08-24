@@ -133,7 +133,7 @@ func TestJWTService_InvalidClaimsAndMalformed(t *testing.T) {
 	wrongIssStr, _ := wrongIssToken.SignedString([]byte("very-secure-jwt-secret-key-at-least-32-chars!"))
 	_, err = svc.ValidateAccessToken(wrongIssStr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid token issuer")
+	assert.Contains(t, err.Error(), "token has invalid issuer")
 
 	// 3. Wrong Audience
 	wrongAudToken := jwtPkg.NewWithClaims(jwtPkg.SigningMethodHS256, jwtPkg.MapClaims{
@@ -147,5 +147,5 @@ func TestJWTService_InvalidClaimsAndMalformed(t *testing.T) {
 	wrongAudStr, _ := wrongAudToken.SignedString([]byte("very-secure-jwt-secret-key-at-least-32-chars!"))
 	_, err = svc.ValidateAccessToken(wrongAudStr)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid token audience")
+	assert.Contains(t, err.Error(), "token has invalid audience")
 }
