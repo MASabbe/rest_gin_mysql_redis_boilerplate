@@ -134,19 +134,21 @@ func (r *MySQLArticleRepository) List(ctx context.Context, filter repository.Art
 
 	whereSQL := strings.Join(whereClauses, " AND ")
 
-	// Total count
+	// Total count (whereSQL contains only static parameterized placeholders)
 	var total int64
+	// #nosec G201 -- whereSQL is safely assembled with static parameterized clauses
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM articles WHERE %s", whereSQL)
 	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, appErrors.NewInternalError("failed to count articles", err)
 	}
 
-	// Safe order by
+	// Safe order by validated against column allowlist
 	orderBy := s.SQLOrderBy()
 	if strings.TrimSpace(s.Field) == "" {
 		orderBy = "created_at DESC"
 	}
 
+	// #nosec G201 -- whereSQL and orderBy are strictly validated against column allowlists
 	query := fmt.Sprintf(`
 		SELECT id, user_id, title, slug, content, status, created_at, updated_at
 		FROM articles

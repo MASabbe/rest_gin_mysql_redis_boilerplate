@@ -18,11 +18,11 @@ services:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_USER=root
-      - MYSQL_PASSWORD=rootpassword
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-rootpassword}
       - MYSQL_DATABASE=app_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=super-secret-jwt-key-change-in-production-min32chars
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_ACCESS_TOKEN_TTL=15m
       - JWT_REFRESH_TOKEN_TTL=168h
       - JWT_ISSUER=backend-api

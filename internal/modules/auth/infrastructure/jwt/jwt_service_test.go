@@ -67,12 +67,17 @@ func TestJWTService_TokenTypeMismatch(t *testing.T) {
 func TestJWTService_ExpiredToken(t *testing.T) {
 	cfg := testJWTConfig()
 	cfg.AccessTokenTTL = -1 * time.Minute // expired
+	cfg.RefreshTokenTTL = -1 * time.Minute
 	svc := jwtInfra.NewJWTService(cfg)
 
 	pair, err := svc.GenerateTokenPair("user-123", "user@example.com")
 	assert.NoError(t, err)
 
 	_, err = svc.ValidateAccessToken(pair.AccessToken)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "token has expired")
+
+	_, err = svc.ValidateRefreshToken(pair.RefreshToken)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "token has expired")
 }
@@ -107,4 +112,40 @@ func TestJWTService_RejectNoneAlgorithm(t *testing.T) {
 	svc := jwtInfra.NewJWTService(testJWTConfig())
 	_, err := svc.ValidateAccessToken(tokenStr)
 	assert.Error(t, err)
+}
+
+func TestJWTService_InvalidClaimsAndMalformed(t *testing.T) {
+	svc := jwtInfra.NewJWTService(testJWTConfig())
+
+	// 1. Malformed token string
+	_, err := svc.ValidateAccessToken("not.a.valid.jwt.token")
+	assert.Error(t, err)
+
+	// 2. Wrong Issuer
+	wrongIssToken := jwtPkg.NewWithClaims(jwtPkg.SigningMethodHS256, jwtPkg.MapClaims{
+		"sub":        "user-123",
+		"email":      "user@example.com",
+		"token_type": "access",
+		"iss":        "wrong-issuer",
+		"aud":        "test-audience",
+		"exp":        time.Now().Add(time.Hour).Unix(),
+	})
+	wrongIssStr, _ := wrongIssToken.SignedString([]byte("very-secure-jwt-secret-key-at-least-32-chars!"))
+	_, err = svc.ValidateAccessToken(wrongIssStr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid token issuer")
+
+	// 3. Wrong Audience
+	wrongAudToken := jwtPkg.NewWithClaims(jwtPkg.SigningMethodHS256, jwtPkg.MapClaims{
+		"sub":        "user-123",
+		"email":      "user@example.com",
+		"token_type": "access",
+		"iss":        "test-issuer",
+		"aud":        "wrong-audience",
+		"exp":        time.Now().Add(time.Hour).Unix(),
+	})
+	wrongAudStr, _ := wrongAudToken.SignedString([]byte("very-secure-jwt-secret-key-at-least-32-chars!"))
+	_, err = svc.ValidateAccessToken(wrongAudStr)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid token audience")
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/application"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/application/command"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/application/query"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/entity"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/repository"
 	jwtInfra "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/infrastructure/jwt"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/infrastructure/password"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/infrastructure/persistence"
@@ -17,7 +19,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func setupTestAuthService() application.AuthService {
+func setupTestAuthService() (application.AuthService, repository.UserRepository) {
 	userRepo := persistence.NewInMemoryUserRepository()
 	tokenRepo := persistence.NewInMemoryTokenRepository()
 	pwdHasher := password.NewBcryptHasher(bcrypt.MinCost)
@@ -31,11 +33,11 @@ func setupTestAuthService() application.AuthService {
 	}
 	tokenSvc := jwtInfra.NewJWTService(jwtCfg)
 
-	return application.NewAuthService(userRepo, tokenRepo, pwdHasher, tokenSvc, 7*24*time.Hour)
+	return application.NewAuthService(userRepo, tokenRepo, pwdHasher, tokenSvc, 7*24*time.Hour), userRepo
 }
 
 func TestAuthService_Register_Success(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	res, err := svc.Register(ctx, command.RegisterCommand{
@@ -51,7 +53,7 @@ func TestAuthService_Register_Success(t *testing.T) {
 }
 
 func TestAuthService_Register_DuplicateEmail(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	_, err := svc.Register(ctx, command.RegisterCommand{
@@ -70,7 +72,7 @@ func TestAuthService_Register_DuplicateEmail(t *testing.T) {
 }
 
 func TestAuthService_Register_ValidationFailure(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	_, err := svc.Register(ctx, command.RegisterCommand{
@@ -81,7 +83,7 @@ func TestAuthService_Register_ValidationFailure(t *testing.T) {
 }
 
 func TestAuthService_Login_Success(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	_, err := svc.Register(ctx, command.RegisterCommand{
@@ -101,8 +103,21 @@ func TestAuthService_Login_Success(t *testing.T) {
 	assert.NotEmpty(t, res.Tokens.AccessToken)
 }
 
+func TestAuthService_Login_UnknownUser(t *testing.T) {
+	svc, _ := setupTestAuthService()
+	ctx := context.Background()
+
+	_, err := svc.Login(ctx, command.LoginCommand{
+		Email:    "unknown@example.com",
+		Password: "Password123!",
+	})
+	assert.Error(t, err)
+	appErr := appErrors.AsAppError(err)
+	assert.Equal(t, appErrors.TypeUnauthorized, appErr.Type)
+}
+
 func TestAuthService_Login_WrongPassword(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	_, err := svc.Register(ctx, command.RegisterCommand{
@@ -120,8 +135,32 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	assert.Equal(t, appErrors.TypeUnauthorized, appErr.Type)
 }
 
+func TestAuthService_Login_InactiveUser(t *testing.T) {
+	svc, userRepo := setupTestAuthService()
+	ctx := context.Background()
+
+	regRes, err := svc.Register(ctx, command.RegisterCommand{
+		Email:    "inactive@example.com",
+		Password: "Password123!",
+	})
+	assert.NoError(t, err)
+
+	// Suspend user
+	u, _ := userRepo.FindByID(ctx, regRes.User.ID)
+	u.Status = entity.UserStatusSuspended
+	_ = userRepo.Update(ctx, u)
+
+	_, err = svc.Login(ctx, command.LoginCommand{
+		Email:    "inactive@example.com",
+		Password: "Password123!",
+	})
+	assert.Error(t, err)
+	appErr := appErrors.AsAppError(err)
+	assert.Equal(t, appErrors.TypeForbidden, appErr.Type)
+}
+
 func TestAuthService_RefreshToken_Rotation_Success(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	regRes, err := svc.Register(ctx, command.RegisterCommand{
@@ -146,7 +185,7 @@ func TestAuthService_RefreshToken_Rotation_Success(t *testing.T) {
 }
 
 func TestAuthService_Logout(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	regRes, err := svc.Register(ctx, command.RegisterCommand{
@@ -168,7 +207,7 @@ func TestAuthService_Logout(t *testing.T) {
 }
 
 func TestAuthService_GetMe(t *testing.T) {
-	svc := setupTestAuthService()
+	svc, _ := setupTestAuthService()
 	ctx := context.Background()
 
 	regRes, err := svc.Register(ctx, command.RegisterCommand{
