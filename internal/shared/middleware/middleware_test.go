@@ -27,13 +27,17 @@ func TestMiddleware_RequestID(t *testing.T) {
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NotEmpty(t, w.Header().Get(middleware.HeaderXRequestID))
+	assert.NotEmpty(t, w.Header().Get(middleware.HeaderXTraceID))
+	assert.NotEmpty(t, w.Header().Get(middleware.HeaderTraceParent))
 
 	// Case 2: Custom Header preserved
 	w2 := httptest.NewRecorder()
 	req2, _ := http.NewRequest(http.MethodGet, "/test-req-id", nil)
 	req2.Header.Set(middleware.HeaderXRequestID, "custom-id-999")
+	req2.Header.Set(middleware.HeaderXTraceID, "4bf92f3577b34da6a3ce929d0e0e4736")
 	r.ServeHTTP(w2, req2)
 	assert.Equal(t, "custom-id-999", w2.Header().Get(middleware.HeaderXRequestID))
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", w2.Header().Get(middleware.HeaderXTraceID))
 }
 
 func TestMiddleware_Recovery(t *testing.T) {

@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/rbac/domain/service"
 	appErrors "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/errors"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/response"
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,7 @@ func RequirePermission(authzService service.AuthorizationService, permission str
 		}
 
 		if !hasPerm {
+			metrics.RecordRBACDenial(permission)
 			response.Error(c, appErrors.NewForbiddenError("Forbidden"))
 			c.Abort()
 			return

@@ -9,6 +9,7 @@ import (
 
 	appErrors "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/errors"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/logger"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 	sharedResponse "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/response"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -74,6 +75,7 @@ func RateLimiter(redisClient *redis.Client, limit int, tier string) gin.HandlerF
 		c.Header("X-RateLimit-Reset", strconv.FormatInt(windowReset, 10))
 
 		if currentCount > int64(limit) {
+			metrics.RecordRateLimitRejection(tier)
 			c.Header("Retry-After", strconv.FormatInt(secondsRemaining, 10))
 			sharedResponse.Error(c, appErrors.NewRateLimitExceededError(
 				fmt.Sprintf("rate limit exceeded, retry after %d seconds", secondsRemaining),

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -41,16 +42,20 @@ func (c *RedisPermissionCache) Get(ctx context.Context, userID string) ([]string
 	val, err := c.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
+			metrics.RecordCacheMiss("rbac")
 			return nil, false, nil // Cache miss
 		}
+		metrics.RecordCacheMiss("rbac")
 		return nil, false, err // Redis error, will fallback to DB
 	}
 
 	var permissions []string
 	if err := json.Unmarshal([]byte(val), &permissions); err != nil {
+		metrics.RecordCacheMiss("rbac")
 		return nil, false, err
 	}
 
+	metrics.RecordCacheHit("rbac")
 	return permissions, true, nil
 }
 

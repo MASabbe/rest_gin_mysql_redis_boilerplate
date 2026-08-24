@@ -12,6 +12,7 @@ import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/repository"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/modules/auth/domain/service"
 	appErrors "github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/errors"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 )
 
 type AuthService interface {
@@ -115,16 +116,19 @@ func (s *authService) Login(ctx context.Context, cmd command.LoginCommand) (*dto
 	user, err := s.userRepo.FindByEmail(ctx, cleanEmail)
 	if err != nil {
 		if isNotFoundError(err) {
+			metrics.RecordAuthFailure("user_not_found")
 			return nil, appErrors.NewUnauthorizedError("invalid email or password")
 		}
 		return nil, err
 	}
 
 	if err := s.passwordHasher.Compare(user.PasswordHash, cmd.Password); err != nil {
+		metrics.RecordAuthFailure("invalid_password")
 		return nil, appErrors.NewUnauthorizedError("invalid email or password")
 	}
 
 	if !user.IsActive() {
+		metrics.RecordAuthFailure("account_inactive")
 		return nil, appErrors.NewForbiddenError("account is inactive or suspended")
 	}
 

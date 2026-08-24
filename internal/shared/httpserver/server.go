@@ -39,6 +39,7 @@ func New(appCfg config.AppConfig, srvCfg config.ServerConfig) *Server {
 		middleware.SecurityHeaders(),
 		middleware.MaxBodySize(srvCfg.MaxBodySizeBytes),
 		middleware.RequestID(),
+		middleware.Metrics(),
 		middleware.Logger(),
 		middleware.Recovery(),
 		middleware.CORS(srvCfg.AllowedOrigins),

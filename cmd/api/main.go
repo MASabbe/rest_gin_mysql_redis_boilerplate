@@ -26,6 +26,7 @@ import (
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/database"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/httpserver"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/logger"
+	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/metrics"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/middleware"
 	"github.com/MASabbe/rest_gin_mysql_redis_boilerplate/internal/shared/redis"
 	goredis "github.com/redis/go-redis/v9"
@@ -128,8 +129,10 @@ func main() {
 		})
 	}
 
-	// Register Health Routes (unmetered for fast liveness/readiness probes)
+	// Register Health & Operational Routes
 	healthHdlr.RegisterRoutes(server.Engine)
+	metrics.RegisterDBStats(mysqlDB.DB)
+	server.Engine.GET("/metrics", metrics.Handler())
 
 	// Register API v1 Routes
 	var redisClientRaw *goredis.Client

@@ -42,7 +42,9 @@ $$\text{Delivery (HTTP/Handlers)} \longrightarrow \text{Application (Use Cases/D
 │   │   ├── database/                # MySQL connection pool
 │   │   ├── redis/                   # Redis client pool
 │   │   ├── logger/                  # Structured slog logger with secret sanitization
-│   │   ├── middleware/              # Hardening, Auth, RateLimiter, Idempotency, etc.
+│   │   ├── metrics/                 # Prometheus metrics registry & collectors (Phase 6)
+│   │   ├── tracer/                  # W3C TraceContext & OpenTelemetry readiness (Phase 6)
+│   │   ├── middleware/              # Hardening, Auth, Metrics, RateLimiter, Idempotency, etc.
 │   │   ├── pagination/              # Unified pagination extracting & metadata
 │   │   ├── queryparam/              # Safe query parameter sorting with column allowlists
 │   │   ├── response/                # Unified JSON response contract
@@ -138,7 +140,34 @@ $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Rol
 
 ---
 
-## 6. API Standard Contract
+## 6. Observability & Operational Readiness (Phase 6)
+
+### Structured Logging (`log/slog`)
+- Log level configurable via `LOG_LEVEL` (`DEBUG`, `INFO`, `WARN`, `ERROR`).
+- In production (`APP_ENV=production`), output is structured JSON.
+- Contextual logging via `logger.WithContext(ctx)` embeds `request_id`, `trace_id`, and `user_id`.
+- Request logs record: `timestamp`, `level`, `request_id`, `trace_id`, `method`, `path`, `status`, `latency`, `ip`, `user_agent`.
+- Sensitive data masking automatically scrubs `password`, `token`, `secret`, `authorization`, `db_password`, `apikey`.
+
+### Prometheus Metrics (`/metrics`)
+All metrics enforce strict low-cardinality label sets:
+- `app_http_requests_total{method, path, status}` (path uses template e.g. `/api/v1/articles/:id`)
+- `app_http_request_duration_seconds{method, path, status}` (Histogram)
+- `app_http_errors_total{method, path, error_type}`
+- `app_auth_failures_total{reason}`
+- `app_rbac_denials_total{permission}`
+- `app_ratelimit_rejections_total{tier}`
+- `app_cache_hits_total{cache}` & `app_cache_misses_total{cache}`
+- `app_db_connections_open`, `app_db_connections_in_use`, `app_db_connections_idle`, `app_db_connections_wait_count`
+
+### Distributed Tracing & W3C Correlation
+- Parses standard W3C `traceparent` (`00-{trace_id}-{span_id}-{flags}`) or `X-Trace-ID` headers.
+- Generates 128-bit trace IDs and propagates them across context, database, cache, and HTTP response headers.
+- OpenTelemetry boundary interface (`Tracer`, `Span`) ready for OTel SDK drop-in without modifying business logic.
+
+---
+
+## 7. API Standard Contract
 
 ### Success Response
 ```json
@@ -168,7 +197,7 @@ $$\text{User} \longleftrightarrow \text{UserRoles} \longleftrightarrow \text{Rol
 
 ---
 
-## 7. Centralized Error Hierarchy
+## 8. Centralized Error Hierarchy
 
 | Error Type | HTTP Status | Code | Typical Use Case |
 |---|---|---|---|

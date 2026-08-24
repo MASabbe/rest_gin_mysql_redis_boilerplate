@@ -35,6 +35,17 @@ paths:
           description: Dependencies (MySQL, Redis) are healthy
         '503':
           description: One or more dependencies are unavailable
+  /metrics:
+    get:
+      summary: Prometheus Metrics Scrape Endpoint
+      tags: [Observability]
+      responses:
+        '200':
+          description: Prometheus formatted application metrics
+          content:
+            text/plain:
+              schema:
+                type: string
 
   # Authentication Endpoints
   /api/v1/auth/register:
@@ -671,6 +682,14 @@ components:
         type: string
         format: uuid
   headers:
+    X-Trace-ID:
+      description: Distributed 128-bit trace ID
+      schema:
+        type: string
+    traceparent:
+      description: W3C TraceContext traceparent header (00-{trace_id}-{span_id}-{flags})
+      schema:
+        type: string
     X-RateLimit-Limit:
       description: Request quota per minute
       schema:

@@ -104,12 +104,13 @@ make feature NAME=product
 
 ## API Endpoints
 
-### Health Module
+### Health & Observability Module
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Overall system health overview |
 | `GET` | `/health/live` | Liveness probe (shallow check for k8s/docker) |
 | `GET` | `/health/ready` | Readiness probe (deep check: MySQL + Redis) |
+| `GET` | `/metrics` | Prometheus metrics scrape endpoint |
 
 ### Authentication Module
 | Method | Path | Description | Protected |
